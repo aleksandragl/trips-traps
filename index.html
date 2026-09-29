@@ -1,65 +1,47 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Video vastused</title>
+    <meta charset="UTF-8">
+    <title>Trips-Traps-Trull Kaameratuvastus</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f9; color: #333; }
+        .container { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+        .board-container { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+        video, canvas { border: 2px solid #333; border-radius: 8px; max-width: 100%; background: #000; }
+        .board { display: grid; grid-template-columns: repeat(3, 80px); gap: 5px; margin-top: 10px; }
+        .cell { width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: bold; border: 2px solid #ccc; background: #fff; border-radius: 6px; }
+        .cell.x { background: #e3f2fd; color: #1976d2; }
+        .cell.o { background: #fff3e0; color: #ef6c00; }
+        .status { margin-top: 15px; font-weight: bold; }
+        button { padding: 12px 20px; font-size: 16px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background-color: #45a049; }
+    </style>
     <script>
-      let player=null, c=null, g=null, g2=null;
-      let span1=null;
+      let player = null, c = null, g = null;
+      let boardState = Array(9).fill("-");
 
-      const questions = [
-          { text: "Kas taevas on sinine?" },
-          { text: "Kas apelsin on oranž?" },
-          { text: "Kas vesi on kuiv?" }
+      // 3x3 ruutudest tsoonide koordinaadid lõuendil (320x240)
+      const gridCoords = [
+        { x: 30,  y: 20  }, { x: 140, y: 20  }, { x: 250, y: 20  },
+        { x: 30,  y: 90  }, { x: 140, y: 90  }, { x: 250, y: 90  },
+        { x: 30,  y: 160 }, { x: 140, y: 160 }, { x: 250, y: 160 }
       ];
 
-      let currentQuestion = 0;
-      let answers = [];
-      let waitingForAnswer = true;
-      let stableColor = null;
-      let stableCount = 0;
-
-      let cooldownActive = false;
-      let cooldownTime = 0;
-
-      function start(){
+      function start() {
         player = document.getElementById("v1");
         c = document.getElementById("c1");
         g = c.getContext("2d");
-        g2 = document.getElementById("c2").getContext("2d");
-        span1 = document.getElementById("s1");
-        
-        navigator.mediaDevices.getUserMedia({video:true}).then((stream) => {
+
+        // Kaamera käivitamine (eelistab mobiilil tagumist kaamerat)
+        navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: { ideal: "environment" } } 
+        }).then((stream) => {
           player.srcObject = stream;
+        }).catch((err) => {
+          alert("Kaamera viga: " + err);
         });
-        
-        setInterval(capture, 300);
-        showQuestion();
-      }
 
-      function startCooldown(seconds) {
-        cooldownActive = true;
-        cooldownTime = seconds;
-        
-        let interval = setInterval(() => {
-          cooldownTime -= 0.5;
-          if (cooldownTime <= 0) {
-            cooldownActive = false;
-            clearInterval(interval);
-          }
-        }, 500);
-      }
-
-      function showQuestion(){
-        if(currentQuestion < questions.length){
-          document.getElementById("question").innerHTML =
-            "Küsimus " + (currentQuestion+1) + "/" + questions.length + ": <b>" +
-            questions[currentQuestion].text + "</b><br>" +
-            "<span style='color:blue'>Sinine = JAH</span> | " +
-            "<span style='color:orange'>Oranž = EI</span>";
-          waitingForAnswer = true;
-        } else {
-          showResults();
-        }
+        setInterval(capture, 400); // Tuvastus iga 0.4 sekundi järel
       }
 
       function rgbToHsv(r, g, b) {
@@ -82,113 +64,119 @@
         return { h: Math.round(h * 360), s: Math.round(s * 100), v: Math.round(v * 100) };
       }
 
-      function capture(){
-        if(!player || !player.videoWidth) return;
+      function capture() {
+        if (!player || !player.videoWidth) return;
 
         g.drawImage(player, 0, 0, c.width, c.height);
-        g.strokeRect(98, 98, 44, 44);
-        let d = g.getImageData(100, 100, 40, 40);
-        g2.putImageData(d, 0, 0);
-        span1.innerHTML = d.data.slice(0,8);
 
-        if(!waitingForAnswer || currentQuestion >= questions.length) return;
+        let newBoardState = [];
 
-        let r=0, gr=0, b=0, count=0;
-        for(let i=0; i<d.data.length; i+=4){
-          r  += d.data[i];
-          gr += d.data[i+1];
-          b  += d.data[i+2];
-          count++;
-        }
-        r  = Math.round(r/count);
-        gr = Math.round(gr/count);
-        b  = Math.round(b/count);
+        gridCoords.forEach((coord, index) => {
+          // Joonistame raami kaamera vaatlusala kohale
+          g.strokeStyle = "#ff0000";
+          g.lineWidth = 2;
+          g.strokeRect(coord.x, coord.y, 40, 40);
 
-        let hsv = rgbToHsv(r, gr, b);
-        let detected = null;
+          let d = g.getImageData(coord.x, coord.y, 40, 40);
+          let r = 0, gr = 0, b = 0, count = 0;
 
-        if (hsv.s > 35 && hsv.v > 20) {
-          // (EI)
-          if (hsv.h >= 10 && hsv.h <= 40) {
-            detected = "ei";
-          } 
-          //(JAH)
-          else if (hsv.h >= 190 && hsv.h <= 230) {
-            detected = "jah";
+          for (let i = 0; i < d.data.length; i += 4) {
+            r  += d.data[i];
+            gr += d.data[i + 1];
+            b  += d.data[i + 2];
+            count++;
           }
-        }
+          r = Math.round(r / count);
+          gr = Math.round(gr / count);
+          b = Math.round(b / count);
 
-        if (cooldownActive) {
-          document.getElementById("colorinfo").innerHTML =
-            "<b style='color: orange;'>Eemalda paber... (" + cooldownTime.toFixed(1) + "s)</b>";
-          stableColor = null;
-          stableCount = 0;
-          return;
-        }
+          let hsv = rgbToHsv(r, gr, b);
+          let symbol = "-";
 
-        document.getElementById("colorinfo").innerHTML =
-          "RGB: (" + r + "," + gr + "," + b + ") | <b>Hue: " + hsv.h + "°</b> | Tuvastatud: <b>" + (detected || "puudub") + "</b> (" + stableCount + "/4)";
-
-        if(detected){
-          if(detected === stableColor){
-            stableCount++;
-          } else {
-            stableColor = detected;
-            stableCount = 1;
+          // Värvide tuvastus
+          if (hsv.s > 30 && hsv.v > 20) {
+            if (hsv.h >= 10 && hsv.h <= 45) {
+              symbol = "O"; // Oranž = O
+            } else if (hsv.h >= 180 && hsv.h <= 240) {
+              symbol = "X"; // Sinine = X
+            }
           }
-          if(stableCount >= 4){
-            recordAnswer(detected);
-          }
-        } else {
-          stableColor = null;
-          stableCount = 0;
-        }
-      }
 
-      function recordAnswer(ans){
-        if(!waitingForAnswer || cooldownActive) return;
-        waitingForAnswer = false;
-        stableColor = null;
-        stableCount = 0;
-        answers.push({
-          question: questions[currentQuestion].text,
-          answer: ans
+          newBoardState.push(symbol);
         });
-        currentQuestion++;
-        showQuestion();
-        startCooldown(2.5);
+
+        updateBoardUI(newBoardState);
+        boardState = newBoardState;
       }
 
-      function answerManually(ans){
-        recordAnswer(ans);
+      function updateBoardUI(state) {
+        state.forEach((symbol, index) => {
+          let cell = document.getElementById("cell-" + index);
+          cell.innerText = symbol === "-" ? "" : symbol;
+          cell.className = "cell " + (symbol === "X" ? "x" : symbol === "O" ? "o" : "");
+        });
       }
 
-      function showResults(){
-        let html = "<h3>Tulemused</h3><table border='1' cellpadding='5'>";
-        html += "<tr><th>Küsimus</th><th>Vastus</th></tr>";
-        for(let a of answers){
-          let colorStyle = a.answer === 'jah' ? 'color:blue' : 'color:orange';
-          html += "<tr><td>" + a.question + "</td><td style='" + colorStyle + "'><b>" + a.answer.toUpperCase() + "</b></td></tr>";
+      const SERVER_URL = "https://script.google.com/macros/s/AKfycbwsSSWgosceyT8KyOIICPZZ6y7povDQ3JC8767rH25yfq3YHl5sLpAaQtgQzvJz5nQG/exec";
+
+      async function sendDataToServer() {
+        const payload = {
+          timestamp: new Date().toLocaleString("et-EE"),
+          board: boardState,
+          board_string: boardState.join(",")
+        };
+
+        const statusEl = document.getElementById("server-status");
+        statusEl.innerText = "Saadan andmeid serverisse...";
+        statusEl.style.color = "blue";
+
+        try {
+          let response = await fetch(SERVER_URL, {
+            method: "POST",
+            mode: "no-cors", // Vajalik Google Apps Scripti puhul
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          statusEl.innerText = "Mänguseis edukalt saadetud!";
+          statusEl.style.color = "green";
+        } catch (error) {
+          statusEl.innerText = "Viga andmete saatmisel!";
+          statusEl.style.color = "red";
+          console.error(error);
         }
-        html += "</table>";
-        document.getElementById("result").innerHTML = html;
-        document.getElementById("question").innerHTML = "<b>Kõik küsimused on vastatud!</b>";
-        document.getElementById("colorinfo").innerHTML = "";
       }
     </script>
 </head>
 <body onload="start()">
-    <video id="v1" autoplay style="width: 45%"></video>
-    <canvas id="c1" width="320" height="240" style="width: 45%"></canvas><br>
-    <canvas id="c2" width="40" height="40"></canvas>
-    <span id="s1">0,0,0,0,0,0,0,0</span>
+    <div class="container">
+        <h2>Trips-Traps-Trull Kaameratuvastus</h2>
 
-    <div id="question" style="margin-top:15px; font-size: 1.2em;"></div>
-    <div id="colorinfo" style="margin: 10px 0;"></div>
-    
-    <button onclick="answerManually('jah')">JAH (Sinine)</button>
-    <button onclick="answerManually('ei')">EI (Oranž)</button>
-    
-    <div id="result" style="margin-top:20px;"></div>
+        <div class="board-container">
+            <div>
+                <video id="v1" autoplay style="display:none;"></video>
+                <canvas id="c1" width="320" height="240"></canvas>
+            </div>
+
+            <div style="text-align: center;">
+                <h3>Tuvastatud ruudustik:</h3>
+                <div class="board">
+                    <div class="cell" id="cell-0"></div>
+                    <div class="cell" id="cell-1"></div>
+                    <div class="cell" id="cell-2"></div>
+                    <div class="cell" id="cell-3"></div>
+                    <div class="cell" id="cell-4"></div>
+                    <div class="cell" id="cell-5"></div>
+                    <div class="cell" id="cell-6"></div>
+                    <div class="cell" id="cell-7"></div>
+                    <div class="cell" id="cell-8"></div>
+                </div>
+                
+                <br>
+                <button onclick="sendDataToServer()">Saada andmed serverisse</button>
+                <div id="server-status" class="status"></div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
