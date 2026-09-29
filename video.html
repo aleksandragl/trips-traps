@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Video vastused</title>
+    <script>
+      let player=null, c=null, g=null, g2=null;
+      let span1=null;
+
+      const questions = [
+          { text: "Kas taevas on sinine?" },
+          { text: "Kas apelsin on oranž?" },
+          { text: "Kas vesi on kuiv?" }
+      ];
+
+      let currentQuestion = 0;
+      let answers = [];
+      let waitingForAnswer = true;
+      let stableColor = null;
+      let stableCount = 0;
+
+      let cooldownActive = false;
+      let cooldownTime = 0;
+
+      function start(){
+        player = document.getElementById("v1");
+        c = document.getElementById("c1");
+        g = c.getContext("2d");
+        g2 = document.getElementById("c2").getContext("2d");
+        span1 = document.getElementById("s1");
+        
+        navigator.mediaDevices.getUserMedia({video:true}).then((stream) => {
+          player.srcObject = stream;
+        });
+        
+        setInterval(capture, 300);
+        showQuestion();
+      }
+
+      function startCooldown(seconds) {
+        cooldownActive = true;
+        cooldownTime = seconds;
+        
+        let interval = setInterval(() => {
+          cooldownTime -= 0.5;
+          if (cooldownTime <= 0) {
+            cooldownActive = false;
+            clearInterval(interval);
+          }
+        }, 500);
+      }
+
+      function showQuestion(){
+        if(currentQuestion < questions.length){
+          document.getElementById("question").innerHTML =
+            "Küsimus " + (currentQuestion+1) + "/" + questions.length + ": <b>" +
+            questions[currentQuestion].text + "</b><br>" +
+            "<span style='color:blue'>Sinine = JAH</span> | " +
+            "<span style='color:orange'>Oranž = EI</span>";
+          waitingForAnswer = true;
+        } else {
+          showResults();
+        }
+      }
+
+      function rgbToHsv(r, g, b) {
+        r /= 255; g /= 255; b /= 255;
+        let max = Math.max(r, g, b), min = Math.min(r, g, b);
+        let h, s, v = max;
+        let d = max - min;
+        s = max === 0 ? 0 : d / max;
+
+        if (max === min) {
+          h = 0;
+        } else {
+          switch (max) {
+            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+            case g: h = (b - r) / d + 2; break;
+            case b: h = (r - g) / d + 4; break;
+          }
+          h /= 6;
+        }
+        return { h: Math.round(h * 360), s: Math.round(s * 100), v: Math.round(v * 100) };
+      }
+
+      function capture(){
+        if(!player || !player.videoWidth) return;
+
+        g.drawImage(player, 0, 0, c.width, c.height);
+        g.strokeRect(98, 98, 44, 44);
+        let d = g.getImageData(100, 100, 40, 40);
+        g2.putImageData(d, 0, 0);
+        span1.innerHTML = d.data.slice(0,8);
+
+        if(!waitingForAnswer || currentQuestion >= questions.length) return;
+
+        let r=0, gr=0, b=0, count=0;
+        for(let i=0; i<d.data.length; i+=4){
+          r  += d.data[i];
+          gr += d.data[i+1];
+          b  += d.data[i+2];
+          count++;
+        }
+        r  = Math.round(r/count);
+        gr = Math.round(gr/count);
+        b  = Math.round(b/count);
+
+        let hsv = rgbToHsv(r, gr, b);
+        let detected = null;
+
+        if (hsv.s > 35 && hsv.v > 20) {
+          // (EI)
+          if (hsv.h >= 10 && hsv.h <= 40) {
+            detected = "ei";
+          } 
+          //(JAH)
+          else if (hsv.h >= 190 && hsv.h <= 230) {
+            detected = "jah";
+          }
+        }
+
+        if (cooldownActive) {
+          document.getElementById("colorinfo").innerHTML =
+            "<b style='color: orange;'>Eemalda paber... (" + cooldownTime.toFixed(1) + "s)</b>";
+          stableColor = null;
+          stableCount = 0;
+          return;
+        }
+
+        document.getElementById("colorinfo").innerHTML =
+          "RGB: (" + r + "," + gr + "," + b + ") | <b>Hue: " + hsv.h + "°</b> | Tuvastatud: <b>" + (detected || "puudub") + "</b> (" + stableCount + "/4)";
+
+        if(detected){
+          if(detected === stableColor){
+            stableCount++;
+          } else {
+            stableColor = detected;
+            stableCount = 1;
+          }
+          if(stableCount >= 4){
+            recordAnswer(detected);
+          }
+        } else {
+          stableColor = null;
+          stableCount = 0;
+        }
+      }
+
+      function recordAnswer(ans){
+        if(!waitingForAnswer || cooldownActive) return;
+        waitingForAnswer = false;
+        stableColor = null;
+        stableCount = 0;
+        answers.push({
+          question: questions[currentQuestion].text,
+          answer: ans
+        });
+        currentQuestion++;
+        showQuestion();
+        startCooldown(2.5);
+      }
+
+      function answerManually(ans){
+        recordAnswer(ans);
+      }
+
+      function showResults(){
+        let html = "<h3>Tulemused</h3><table border='1' cellpadding='5'>";
+        html += "<tr><th>Küsimus</th><th>Vastus</th></tr>";
+        for(let a of answers){
+          let colorStyle = a.answer === 'jah' ? 'color:blue' : 'color:orange';
+          html += "<tr><td>" + a.question + "</td><td style='" + colorStyle + "'><b>" + a.answer.toUpperCase() + "</b></td></tr>";
+        }
+        html += "</table>";
+        document.getElementById("result").innerHTML = html;
+        document.getElementById("question").innerHTML = "<b>Kõik küsimused on vastatud!</b>";
+        document.getElementById("colorinfo").innerHTML = "";
+      }
+    </script>
+</head>
+<body onload="start()">
+    <video id="v1" autoplay style="width: 45%"></video>
+    <canvas id="c1" width="320" height="240" style="width: 45%"></canvas><br>
+    <canvas id="c2" width="40" height="40"></canvas>
+    <span id="s1">0,0,0,0,0,0,0,0</span>
+
+    <div id="question" style="margin-top:15px; font-size: 1.2em;"></div>
+    <div id="colorinfo" style="margin: 10px 0;"></div>
+    
+    <button onclick="answerManually('jah')">JAH (Sinine)</button>
+    <button onclick="answerManually('ei')">EI (Oranž)</button>
+    
+    <div id="result" style="margin-top:20px;"></div>
+</body>
+</html>
