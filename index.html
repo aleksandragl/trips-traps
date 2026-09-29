@@ -12,6 +12,10 @@
         .cell { width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: bold; border: 2px solid #ccc; background: #fff; border-radius: 6px; }
         .cell.x { background: #e3f2fd; color: #1976d2; }
         .cell.o { background: #fff3e0; color: #ef6c00; }
+        .game-result { font-size: 1.3em; font-weight: bold; margin: 10px 0; padding: 10px; border-radius: 6px; }
+        .result-none { background: #e0e0e0; color: #555; }
+        .result-win { background: #c8e6c9; color: #2e7d32; }
+        .result-draw { background: #fff9c4; color: #f57f17; }
         .status { margin-top: 15px; font-weight: bold; }
         button { padding: 12px 20px; font-size: 16px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; }
         button:hover { background-color: #45a049; }
@@ -19,6 +23,7 @@
     <script>
       let player = null, c = null, g = null;
       let boardState = Array(9).fill("-");
+      let currentGameResult = "Mäng käib"; // Хранит текущий статус игры
 
       // 3x3 ruutudest tsoonide koordinaadid lõuendil (320x240)
       const gridCoords = [
@@ -27,12 +32,18 @@
         { x: 30,  y: 160 }, { x: 140, y: 160 }, { x: 250, y: 160 }
       ];
 
+      // Выигрышные комбинации (индексы клеток)
+      const winningCombos = [
+        [0, 1, 2], [3, 4, 5], [6, 7, 8], // Горизонтали
+        [0, 3, 6], [1, 4, 7], [2, 5, 8], // Вертикали
+        [0, 4, 8], [2, 4, 6]             // Диагонали
+      ];
+
       function start() {
         player = document.getElementById("v1");
         c = document.getElementById("c1");
         g = c.getContext("2d");
 
-        // Kaamera käivitamine (eelistab mobiilil tagumist kaamerat)
         navigator.mediaDevices.getUserMedia({ 
             video: { facingMode: { ideal: "environment" } } 
         }).then((stream) => {
@@ -41,7 +52,7 @@
           alert("Kaamera viga: " + err);
         });
 
-        setInterval(capture, 400); // Tuvastus iga 0.4 sekundi järel
+        setInterval(capture, 400);
       }
 
       function rgbToHsv(r, g, b) {
@@ -64,6 +75,19 @@
         return { h: Math.round(h * 360), s: Math.round(s * 100), v: Math.round(v * 100) };
       }
 
+      function checkWinner(board) {
+        for (let combo of winningCombos) {
+          const [a, b, c] = combo;
+          if (board[a] !== "-" && board[a] === board[b] && board[a] === board[c]) {
+            return "Võitja: " + board[a]; // Победитель X или O
+          }
+        }
+        if (!board.includes("-")) {
+          return "Viik!"; // Ничья (все клетки заполнены)
+        }
+        return "Mäng käib"; // Игра продолжается
+      }
+
       function capture() {
         if (!player || !player.videoWidth) return;
 
@@ -72,7 +96,6 @@
         let newBoardState = [];
 
         gridCoords.forEach((coord, index) => {
-          // Joonistame raami kaamera vaatlusala kohale
           g.strokeStyle = "#ff0000";
           g.lineWidth = 2;
           g.strokeRect(coord.x, coord.y, 40, 40);
@@ -93,28 +116,40 @@
           let hsv = rgbToHsv(r, gr, b);
           let symbol = "-";
 
-          // Värvide tuvastus
           if (hsv.s > 30 && hsv.v > 20) {
             if (hsv.h >= 10 && hsv.h <= 45) {
-              symbol = "O"; // Oranž = O
+              symbol = "O";
             } else if (hsv.h >= 180 && hsv.h <= 240) {
-              symbol = "X"; // Sinine = X
+              symbol = "X";
             }
           }
 
           newBoardState.push(symbol);
         });
 
-        updateBoardUI(newBoardState);
         boardState = newBoardState;
+        currentGameResult = checkWinner(boardState);
+
+        updateBoardUI(boardState, currentGameResult);
       }
 
-      function updateBoardUI(state) {
+      function updateBoardUI(state, result) {
         state.forEach((symbol, index) => {
           let cell = document.getElementById("cell-" + index);
           cell.innerText = symbol === "-" ? "" : symbol;
           cell.className = "cell " + (symbol === "X" ? "x" : symbol === "O" ? "o" : "");
         });
+
+        const resEl = document.getElementById("game-result");
+        resEl.innerText = result;
+
+        if (result.startsWith("Võitja")) {
+          resEl.className = "game-result result-win";
+        } else if (result === "Viik!") {
+          resEl.className = "game-result result-draw";
+        } else {
+          resEl.className = "game-result result-none";
+        }
       }
 
       const SERVER_URL = "https://script.google.com/macros/s/AKfycbwsSSWgosceyT8KyOIICPZZ6y7povDQ3JC8767rH25yfq3YHl5sLpAaQtgQzvJz5nQG/exec";
@@ -123,7 +158,8 @@
         const payload = {
           timestamp: new Date().toLocaleString("et-EE"),
           board: boardState,
-          board_string: boardState.join(",")
+          board_string: boardState.join(","),
+          result: currentGameResult // Передаем статус победы
         };
 
         const statusEl = document.getElementById("server-status");
@@ -131,14 +167,14 @@
         statusEl.style.color = "blue";
 
         try {
-          let response = await fetch(SERVER_URL, {
+          await fetch(SERVER_URL, {
             method: "POST",
-            mode: "no-cors", // Vajalik Google Apps Scripti puhul
+            mode: "no-cors",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
           });
 
-          statusEl.innerText = "Mänguseis edukalt saadetud!";
+          statusEl.innerText = "Mänguseis ja tulemus edukalt saadetud!";
           statusEl.style.color = "green";
         } catch (error) {
           statusEl.innerText = "Viga andmete saatmisel!";
@@ -154,7 +190,7 @@
 
         <div class="board-container">
             <div>
-                <video id="v1" autoplay style="display:none;"></video>
+                <video id="v1" autoplay playsinline style="display:none;"></video>
                 <canvas id="c1" width="320" height="240"></canvas>
             </div>
 
@@ -171,8 +207,9 @@
                     <div class="cell" id="cell-7"></div>
                     <div class="cell" id="cell-8"></div>
                 </div>
-                
-                <br>
+
+                <div id="game-result" class="game-result result-none">Mäng käib</div>
+
                 <button onclick="sendDataToServer()">Saada andmed serverisse</button>
                 <div id="server-status" class="status"></div>
             </div>
