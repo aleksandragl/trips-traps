@@ -2,50 +2,86 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Trips-Traps-Trull Kaameratuvastus</title>
+    <title>Trips-Traps-Trull — Inimene vs Arvuti</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f9; color: #333; }
         .container { display: flex; flex-direction: column; align-items: center; gap: 20px; }
         .board-container { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
         video, canvas { border: 2px solid #333; border-radius: 8px; max-width: 100%; background: #000; }
-        .board { display: grid; grid-template-columns: repeat(3, 80px); gap: 5px; margin-top: 10px; }
-        .cell { width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: bold; border: 2px solid #ccc; background: #fff; border-radius: 6px; }
-        .cell.x { background: #e3f2fd; color: #1976d2; }
-        .cell.o { background: #fff3e0; color: #ef6c00; }
-        .game-result { font-size: 1.3em; font-weight: bold; margin: 10px 0; padding: 10px; border-radius: 6px; }
+        .board { display: grid; grid-template-columns: repeat(3, 100px); gap: 6px; margin-top: 10px; }
+        .cell {
+            width: 100px; height: 100px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 48px; font-weight: bold;
+            border: 3px solid #999; background: #fff; border-radius: 8px;
+            transition: all 0.3s;
+        }
+        .cell.x { background: #e3f2fd; color: #1976d2; }       /* синий — компьютер */
+        .cell.o { background: #fff3e0; color: #ef6c00; }       /* оранжевый — человек */
+        .cell.suggested {
+            outline: 5px solid #ff9800;
+            box-shadow: 0 0 20px #ff9800;
+            transform: scale(1.06);
+        }
+        .cell.new-move {
+            animation: pop 0.6s ease;
+        }
+        @keyframes pop {
+            0%   { transform: scale(0.3); opacity: 0; }
+            60%  { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(1); }
+        }
+        .game-result { font-size: 1.4em; font-weight: bold; margin: 15px 0; padding: 12px 20px; border-radius: 8px; }
         .result-none { background: #e0e0e0; color: #555; }
-        .result-win { background: #c8e6c9; color: #2e7d32; }
+        .result-win  { background: #c8e6c9; color: #2e7d32; }
+        .result-lose { background: #ffcdd2; color: #c62828; }
         .result-draw { background: #fff9c4; color: #f57f17; }
-        .status { margin-top: 15px; font-weight: bold; }
-        button { padding: 12px 20px; font-size: 16px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .status { margin-top: 10px; font-weight: bold; font-size: 1.1em; }
+        button {
+            padding: 14px 24px; font-size: 17px; background-color: #4CAF50;
+            color: white; border: none; border-radius: 6px; cursor: pointer;
+            margin: 4px;
+        }
         button:hover { background-color: #45a049; }
+        button:disabled { background-color: #bbb; cursor: not-allowed; }
+        .hint { margin-top: 10px; font-size: 1.1em; color: #1976d2; font-weight: bold; }
+        .legend { display: flex; gap: 20px; justify-content: center; margin: 10px 0; font-size: 1.1em; }
+        .legend span { display: flex; align-items: center; gap: 6px; }
+        .dot { width: 22px; height: 22px; border-radius: 50%; display: inline-block; border: 2px solid #333; }
+        .dot.x { background: #1976d2; }
+        .dot.o { background: #ef6c00; }
     </style>
     <script>
       let player = null, c = null, g = null;
-      let boardState = Array(9).fill("-");
-      let currentGameResult = "Mäng käib"; // Хранит текущий статус игры
+      let boardState = Array(9).fill("-");   // состояние с камеры
+      let currentGameResult = "Mäng käib";
+      let lastComputerMove = -1;             // индекс последнего хода компа
+      let humanSymbol = "O";                 // человек — O (оранжевый)
+      let computerSymbol = "X";              // компьютер — X (синий)
+      let waitingForServer = false;
 
-      // 3x3 ruutudest tsoonide koordinaadid lõuendil (320x240)
+      // Координаты 9 зон на холсте 320x240 — те же, что были
       const gridCoords = [
         { x: 30,  y: 20  }, { x: 140, y: 20  }, { x: 250, y: 20  },
         { x: 30,  y: 90  }, { x: 140, y: 90  }, { x: 250, y: 90  },
         { x: 30,  y: 160 }, { x: 140, y: 160 }, { x: 250, y: 160 }
       ];
 
-      // Выигрышные комбинации (индексы клеток)
       const winningCombos = [
-        [0, 1, 2], [3, 4, 5], [6, 7, 8], // Горизонтали
-        [0, 3, 6], [1, 4, 7], [2, 5, 8], // Вертикали
-        [0, 4, 8], [2, 4, 6]             // Диагонали
+        [0, 1, 2], [3, 4, 5], [6, 7, 8],
+        [0, 3, 6], [1, 4, 7], [2, 5, 8],
+        [0, 4, 8], [2, 4, 6]
       ];
+
+      const SERVER_URL = "https://script.google.com/macros/s/AKfycbwCkaQeRqbG3i4uefRugBjCIqoBwPr7Ebn0292t__OPej2b0F9i0S44qFKX_Q1tf7n8/exec";
 
       function start() {
         player = document.getElementById("v1");
         c = document.getElementById("c1");
         g = c.getContext("2d");
 
-        navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: { ideal: "environment" } } 
+        navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } }
         }).then((stream) => {
           player.srcObject = stream;
         }).catch((err) => {
@@ -53,18 +89,18 @@
         });
 
         setInterval(capture, 400);
+        updateBoardUI(boardState, currentGameResult);
       }
 
+      // ===== Цвет → символ (те же пороги, что были) =====
       function rgbToHsv(r, g, b) {
         r /= 255; g /= 255; b /= 255;
         let max = Math.max(r, g, b), min = Math.min(r, g, b);
         let h, s, v = max;
         let d = max - min;
         s = max === 0 ? 0 : d / max;
-
-        if (max === min) {
-          h = 0;
-        } else {
+        if (max === min) { h = 0; }
+        else {
           switch (max) {
             case r: h = (g - b) / d + (g < b ? 6 : 0); break;
             case g: h = (b - r) / d + 2; break;
@@ -79,34 +115,31 @@
         for (let combo of winningCombos) {
           const [a, b, c] = combo;
           if (board[a] !== "-" && board[a] === board[b] && board[a] === board[c]) {
-            return "Võitja: " + board[a]; // Победитель X или O
+            return "Võitja: " + board[a];
           }
         }
-        if (!board.includes("-")) {
-          return "Viik!"; // Ничья (все клетки заполнены)
-        }
-        return "Mäng käib"; // Игра продолжается
+        if (!board.includes("-")) return "Viik!";
+        return "Mäng käib";
       }
 
+      // ===== Захват с камеры =====
       function capture() {
         if (!player || !player.videoWidth) return;
-
         g.drawImage(player, 0, 0, c.width, c.height);
 
         let newBoardState = [];
-
-        gridCoords.forEach((coord, index) => {
+        gridCoords.forEach((coord) => {
+          // Рисуем зону: красный квадрат
           g.strokeStyle = "#ff0000";
           g.lineWidth = 2;
           g.strokeRect(coord.x, coord.y, 40, 40);
 
           let d = g.getImageData(coord.x, coord.y, 40, 40);
           let r = 0, gr = 0, b = 0, count = 0;
-
           for (let i = 0; i < d.data.length; i += 4) {
             r  += d.data[i];
-            gr += d.data[i + 1];
-            b  += d.data[i + 2];
+            gr += d.data[i+1];
+            b  += d.data[i+2];
             count++;
           }
           r = Math.round(r / count);
@@ -118,33 +151,38 @@
 
           if (hsv.s > 30 && hsv.v > 20) {
             if (hsv.h >= 10 && hsv.h <= 45) {
-              symbol = "O";
+              symbol = "O";   // оранжевый → O (человек)
             } else if (hsv.h >= 180 && hsv.h <= 240) {
-              symbol = "X";
+              symbol = "X";   // синий → X (компьютер)
             }
           }
-
           newBoardState.push(symbol);
         });
 
         boardState = newBoardState;
         currentGameResult = checkWinner(boardState);
-
         updateBoardUI(boardState, currentGameResult);
       }
 
+      // ===== Отрисовка поля =====
       function updateBoardUI(state, result) {
         state.forEach((symbol, index) => {
           let cell = document.getElementById("cell-" + index);
+          const wasSuggested = cell.classList.contains("suggested");
+          const wasNew = cell.classList.contains("new-move");
+
           cell.innerText = symbol === "-" ? "" : symbol;
           cell.className = "cell " + (symbol === "X" ? "x" : symbol === "O" ? "o" : "");
+          if (wasSuggested) cell.classList.add("suggested");
+          if (wasNew) cell.classList.add("new-move");
         });
 
         const resEl = document.getElementById("game-result");
         resEl.innerText = result;
-
-        if (result.startsWith("Võitja")) {
-          resEl.className = "game-result result-win";
+        if (result.startsWith("Võitja: X")) {
+          resEl.className = "game-result result-lose";  // X — компьютер → ты проиграл
+        } else if (result.startsWith("Võitja: O")) {
+          resEl.className = "game-result result-win";   // O — ты → ты выиграл
         } else if (result === "Viik!") {
           resEl.className = "game-result result-draw";
         } else {
@@ -152,50 +190,135 @@
         }
       }
 
-      const SERVER_URL = "https://script.google.com/macros/s/AKfycbwCkaQeRqbG3i4uefRugBjCIqoBwPr7Ebn0292t__OPej2b0F9i0S44qFKX_Q1tf7n8/exec";
-
+      // ===== Отправка на сервер + запрос хода =====
       async function sendDataToServer() {
-        const payload = {
-          timestamp: new Date().toLocaleString("et-EE"),
-          board: boardState,
-          board_string: boardState.join(","),
-          result: currentGameResult // Передаем статус победы
-        };
+        if (waitingForServer) return;
+        waitingForServer = true;
 
         const statusEl = document.getElementById("server-status");
         statusEl.innerText = "Saadan andmeid serverisse...";
         statusEl.style.color = "blue";
 
+        const payload = {
+          timestamp: new Date().toLocaleString("et-EE"),
+          board: boardState,
+          board_string: boardState.join(","),
+          result: currentGameResult
+        };
+
         try {
+          // 1. POST — запись в таблицу (ответ не читаем, no-cors)
           await fetch(SERVER_URL, {
             method: "POST",
             mode: "no-cors",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
           });
-
-          statusEl.innerText = "Mänguseis ja tulemus edukalt saadetud!";
+          statusEl.innerText = "Seis salvestatud. Küsib arvuti käiku...";
           statusEl.style.color = "green";
         } catch (error) {
-          statusEl.innerText = "Viga andmete saatmisel!";
+          statusEl.innerText = "Viga salvestamisel!";
           statusEl.style.color = "red";
           console.error(error);
+          waitingForServer = false;
+          return;
         }
+
+        // 2. GET — JSONP — получаем ход компьютера
+        askServerForMove(boardState);
+      }
+
+      function askServerForMove(board) {
+        window.handleServerMove = function(data) {
+          waitingForServer = false;
+          const move = data.nextMove;
+
+          if (move === -1 || move === undefined || move === null) {
+            document.getElementById("server-status").innerText =
+              "Arvuti: käik puudub (mäng läbi).";
+            return;
+          }
+
+          showComputerMove(move);
+        };
+
+        const script = document.createElement("script");
+        script.src = SERVER_URL + "?board=" + board.join(",") + "&callback=handleServerMove";
+        document.body.appendChild(script);
+        script.onload = () => script.remove();
+      }
+
+      // ===== Показ хода компьютера на виртуальном поле =====
+      function showComputerMove(index) {
+        // Ставим X (синий) в эту клетку на виртуальном поле
+        if (boardState[index] === "-") {
+          boardState[index] = "X"; // компьютер играет X
+        }
+
+        // Убираем старые подсветки
+        document.querySelectorAll(".cell").forEach(c => {
+          c.classList.remove("suggested");
+          c.classList.remove("new-move");
+        });
+
+        // Подсвечиваем и анимируем новую клетку
+        const cell = document.getElementById("cell-" + index);
+        if (cell) {
+          cell.classList.add("new-move");
+          cell.classList.add("suggested");
+          setTimeout(() => cell.classList.remove("suggested"), 3000);
+        }
+
+        // Обновляем виртуальное поле
+        currentGameResult = checkWinner(boardState);
+        updateBoardUI(boardState, currentGameResult);
+
+        // Текст-подсказка
+        const statusEl = document.getElementById("server-status");
+        statusEl.innerText = "Arvuti käis ruudule: " + (index + 1) +
+                             " — pane oma O kuhugi vabale ruudule!";
+        statusEl.style.color = "#1976d2";
+
+        if (currentGameResult !== "Mäng käib") {
+          statusEl.innerText = "Mäng läbi: " + currentGameResult;
+        }
+      }
+
+      // ===== Сброс игры =====
+      function resetGame() {
+        boardState = Array(9).fill("-");
+        currentGameResult = "Mäng käib";
+        lastComputerMove = -1;
+        waitingForServer = false;
+        document.querySelectorAll(".cell").forEach(c => {
+          c.classList.remove("suggested");
+          c.classList.remove("new-move");
+        });
+        document.getElementById("server-status").innerText = "";
+        updateBoardUI(boardState, currentGameResult);
       }
     </script>
 </head>
 <body onload="start()">
     <div class="container">
-        <h2>Trips-Traps-Trull Kaameratuvastus</h2>
+        <h2>Trips-Traps-Trull — Inimene vs Arvuti</h2>
+
+        <div class="legend">
+            <span><span class="dot x"></span> X — Arvuti (arvutab server)</span>
+            <span><span class="dot o"></span> O — Sina (joonista paberile)</span>
+        </div>
 
         <div class="board-container">
             <div>
                 <video id="v1" autoplay playsinline style="display:none;"></video>
                 <canvas id="c1" width="320" height="240"></canvas>
+                <div style="text-align:center; margin-top:6px; font-size:0.95em; color:#555;">
+                    Aseta paber nii, et kõik 9 punast ruutu kataksid mänguvälja
+                </div>
             </div>
 
             <div style="text-align: center;">
-                <h3>Tuvastatud ruudustik:</h3>
+                <h3>Mängulaud (kaamera + arvuti)</h3>
                 <div class="board">
                     <div class="cell" id="cell-0"></div>
                     <div class="cell" id="cell-1"></div>
@@ -210,8 +333,13 @@
 
                 <div id="game-result" class="game-result result-none">Mäng käib</div>
 
-                <button onclick="sendDataToServer()">Saada andmed serverisse</button>
+                <button onclick="sendDataToServer()">Sinu käik tehtud — saada serverisse</button>
+                <button onclick="resetGame()" style="background:#607d8b;">Uus mäng</button>
+
                 <div id="server-status" class="status"></div>
+                <div class="hint" id="hint-text">
+                    Joonista O (oranz marker) ühte tühja ruutu ja vajuta rohelist nuppu.
+                </div>
             </div>
         </div>
     </div>
