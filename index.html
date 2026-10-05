@@ -187,18 +187,17 @@
           gr = Math.round(gr / count);
           b  = Math.round(b / count);
 
-          let hsv = rgbToHsv(r, gr, b);
           let symbol = "-";
 
-                      // ===== Распознавание цветов ===
+          // ===== Распознавание цветов через RGB =====
+          // СВЕТЛО-СИНИЙ (как небо) → X (человек)
           if (b > r + 15 && b > 120 && b >= gr) {
-                symbol = "X";
-            }
-            // КРАСНЫЙ → O (компьютер)
-            // Красный канал заметно больше синего и зелёного
-           else if (r > b + 30 && r > gr + 30 && r > 100) {
-                symbol = "O";
-            }
+            symbol = "X";
+          }
+          // КРАСНЫЙ → O (компьютер)
+          else if (r > b + 30 && r > gr + 30 && r > 100) {
+            symbol = "O";
+          }
 
           newBoardState.push(symbol);
         });
@@ -253,8 +252,8 @@
         document.getElementById("server-status").innerText = "";
       }
 
-      // ===== Отправка на сервер =====
-      async function sendDataToServer() {
+      // ===== Отправка на сервер — теперь ТОЛЬКО GET, без POST =====
+      function sendDataToServer() {
         if (waitingForServer || gameOver) return;
 
         if (!boardState.includes("X")) {
@@ -268,33 +267,10 @@
         document.getElementById("send-btn").disabled = true;
 
         const statusEl = document.getElementById("server-status");
-        statusEl.innerText = "⏳ Saadan seisu serverisse...";
-        statusEl.style.color = "blue";
+        statusEl.innerText = "⏳ Küsin arvutilt käiku...";
+        statusEl.style.color = "green";
 
-        const payload = {
-          timestamp: new Date().toLocaleString("et-EE"),
-          board: boardState,
-          board_string: boardState.join(","),
-          result: currentGameResult
-        };
-
-        try {
-          await fetch(SERVER_URL, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-          });
-          statusEl.innerText = "⏳ Küsin arvutilt käiku...";
-          statusEl.style.color = "green";
-        } catch (error) {
-          statusEl.innerText = "❌ Viga salvestamisel!";
-          statusEl.style.color = "red";
-          waitingForServer = false;
-          document.getElementById("send-btn").disabled = false;
-          return;
-        }
-
+        // Сразу GET — один запрос вместо двух
         askServerForMove(boardState);
       }
 
@@ -314,7 +290,7 @@
         };
 
         const script = document.createElement("script");
-        script.src = SERVER_URL + "?board=" + board.join(",") + "&callback=handleServerMove";
+        script.src = SERVER_URL + "?board=" + board.join(",") + "&callback=handleServerMove&t=" + Date.now();
         document.body.appendChild(script);
         script.onload = () => script.remove();
       }
