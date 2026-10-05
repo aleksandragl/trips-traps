@@ -16,12 +16,9 @@
             border: 3px solid #999; background: #fff; border-radius: 8px;
             transition: all 0.3s;
         }
-        /* СИНИЙ = X = человек */
         .cell.x { background: #e3f2fd; color: #1976d2; border-color: #1976d2; }
-        /* КРАСНЫЙ = O = компьютер */
         .cell.o { background: #ffebee; color: #d32f2f; border-color: #d32f2f; }
 
-        /* Куда положить красный квадратик (подсказка) */
         .cell.place-here {
             animation: blink 1s infinite alternate;
             border-color: #d32f2f;
@@ -100,8 +97,8 @@
       let currentGameResult = "Mäng käib";
       let waitingForServer = false;
       let gameOver = false;
-      let waitingForHumanMove = true;  // ждём, пока человек положит синий
-      let suggestedRedIndex = -1;      // куда комп просит положить красный
+      let waitingForHumanMove = true;
+      let suggestedRedIndex = -1;
 
       const gridCoords = [
         { x: 30,  y: 20  }, { x: 140, y: 20  }, { x: 250, y: 20  },
@@ -172,6 +169,7 @@
         g.drawImage(player, 0, 0, c.width, c.height);
 
         let newBoardState = [];
+
         gridCoords.forEach((coord) => {
           g.strokeStyle = "#ff0000";
           g.lineWidth = 2;
@@ -192,8 +190,8 @@
           let hsv = rgbToHsv(r, gr, b);
           let symbol = "-";
 
-         if (hsv.v > 40) {
-
+          // ===== Распознавание цветов =====
+          if (hsv.v > 40) {
             // СВЕТЛО-СИНИЙ / ГОЛУБОЙ → X (человек)
             if (hsv.h >= 170 && hsv.h <= 270 && hsv.s > 12) {
               symbol = "X";
@@ -202,7 +200,8 @@
             else if (((hsv.h >= 0 && hsv.h <= 20) || (hsv.h >= 340 && hsv.h <= 360)) && hsv.s > 25) {
               symbol = "O";
             }
-          
+          }
+
           newBoardState.push(symbol);
         });
 
@@ -327,31 +326,26 @@
         suggestedRedIndex = index;
         waitingForHumanMove = false;
 
-        // Убираем старые подсказки
         document.querySelectorAll(".cell").forEach(c => {
           c.classList.remove("place-here");
           c.classList.remove("new-move");
         });
 
-        // Подсвечиваем миганием нужную клетку
         const cell = document.getElementById("cell-" + index);
         if (cell) {
           cell.classList.add("place-here");
           cell.classList.add("new-move");
         }
 
-        // Большая подсказка
         const hint = document.getElementById("big-hint");
         hint.className = "big-hint red";
         hint.innerText = "🔴 ARVUTI KÄIK: aseta PUNANE ruut ruutu " +
                          (index + 1) + " (vasakult ülevalt lugedes)";
 
-        // Текст в статусе
         const statusEl = document.getElementById("server-status");
         statusEl.style.color = "#d32f2f";
         statusEl.innerText = "Aseta punane ruut mängulauale ja vajuta nuppu uuesti.";
 
-        // Меняем смысл кнопки: теперь "я положил красный"
         const btn = document.getElementById("send-btn");
         btn.innerText = "✅ Punane asetatud — nüüd minu kord";
         btn.disabled = false;
@@ -362,25 +356,20 @@
       function confirmRedPlaced() {
         if (suggestedRedIndex === -1) return;
 
-        // Проверяем, что камера действительно видит красный там
         if (boardState[suggestedRedIndex] !== "O") {
-          // Может, камера ещё не увидела — подождём немного
           document.getElementById("server-status").innerText =
             "⏳ Ootan, et kaamera näeks punast ruutu...";
           setTimeout(confirmRedPlaced, 600);
           return;
         }
 
-        // Всё ок — сбрасываем подсказку и даём ход человеку
         document.querySelectorAll(".cell").forEach(c => c.classList.remove("place-here"));
         suggestedRedIndex = -1;
 
-        // Возвращаем кнопку в обычное состояние
         const btn = document.getElementById("send-btn");
         btn.innerText = "✅ Minu käik tehtud — saada serverisse";
         btn.onclick = sendDataToServer;
 
-        // Проверяем, не закончилась ли игра
         currentGameResult = checkWinner(boardState);
         if (currentGameResult !== "Mäng käib") {
           gameOver = true;
