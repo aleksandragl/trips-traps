@@ -192,16 +192,17 @@
           let hsv = rgbToHsv(r, gr, b);
           let symbol = "-";
 
-          if (hsv.s > 35 && hsv.v > 25) {
-            // СИНИЙ
-            if (hsv.h >= 180 && hsv.h <= 260) {
+         if (hsv.v > 40) {
+
+            // СВЕТЛО-СИНИЙ / ГОЛУБОЙ → X (человек)
+            if (hsv.h >= 170 && hsv.h <= 270 && hsv.s > 12) {
               symbol = "X";
             }
-            // КРАСНЫЙ
-            else if ((hsv.h >= 0 && hsv.h <= 15) || (hsv.h >= 345 && hsv.h <= 360)) {
+            // КРАСНЫЙ → O (компьютер)
+            else if (((hsv.h >= 0 && hsv.h <= 20) || (hsv.h >= 340 && hsv.h <= 360)) && hsv.s > 25) {
               symbol = "O";
             }
-          }
+          
           newBoardState.push(symbol);
         });
 
