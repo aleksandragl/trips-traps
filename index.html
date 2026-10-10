@@ -82,7 +82,7 @@
         Aseta paber nii, et kõik 9 raami oleksid mängulaua lahtrite peal.
       </div>
       <div style="margin-top:8px;">
-        <button class="calib" onclick="calibrate()">🎯 Kalibreeri (tühi laud)</button>
+        <button class="calib" onclick="calibrate()">Kalibreeri (tühi laud)</button>
       </div>
       <div id="calib-status" class="seen"></div>
     </div>
@@ -105,8 +105,8 @@
             </select>
           </label>
         </div>
-        <button id="send-btn" onclick="sendDataToServer()">✅ Minu käik tehtud</button>
-        <button class="reset" onclick="resetGame()">🔄 Uus mäng</button>
+        <button id="send-btn" onclick="sendDataToServer()">Minu käik tehtud</button>
+        <button class="reset" onclick="resetGame()">Uus mäng</button>
       </div>
 
       <div id="server-status" class="status"></div>
@@ -258,7 +258,7 @@
     setCalibText(true);
   }
   function setCalibText(ok) {
-    document.getElementById("calib-status").innerText = ok ? "✔ Kalibreeritud" : "Kalibreerimata";
+    document.getElementById("calib-status").innerText = ok ? "Kalibreeritud" : "Kalibreerimata";
   }
 
   // ---------- логика игры ----------
@@ -293,7 +293,7 @@
         showHumanTurn();
       } else if (stable[suggested] !== "O" && sentBoard &&
                  stable.some((v, i) => v === "O" && i !== suggested && sentBoard[i] !== "O")) {
-        setStatus("⚠️ Punane ruut on vales kohas! Vaja ruutu " + (suggested + 1) + ".", "#d32f2f");
+        setStatus("Punane ruut on vales kohas! Vaja ruutu " + (suggested + 1) + ".", "#d32f2f");
       }
     }
     maybePush();
@@ -305,7 +305,7 @@
     renderBoard(res);
     const hint = document.getElementById("big-hint");
     hint.className = "big-hint blue";
-    hint.innerText = "🏁 " + (res === "Viik!" ? "Viik!" : res.endsWith("X") ? "Sina võitsid!" : "Arvuti võitis!");
+    hint.innerText = res === "Viik!" ? "Viik!" : res.endsWith("X") ? "Sina võitsid!" : "Arvuti võitis!";
     document.getElementById("send-btn").disabled = true;
     clearPlaceHere();
   }
@@ -321,9 +321,9 @@
     const valid = (nx - no === 0 || nx - no === 1);
     const result = forcedResult || (valid ? checkWinner(stable) : "Mäng käib");
     const el = document.getElementById("game-result");
-    if (result === "Võitja: X") { el.className = "game-result result-win";  el.innerText = "🎉 Sina võitsid!"; }
-    else if (result === "Võitja: O") { el.className = "game-result result-lose"; el.innerText = "😢 Arvuti võitis!"; }
-    else if (result === "Viik!") { el.className = "game-result result-draw"; el.innerText = "🤝 Viik!"; }
+    if (result === "Võitja: X") { el.className = "game-result result-win";  el.innerText = "Sina võitsid!"; }
+    else if (result === "Võitja: O") { el.className = "game-result result-lose"; el.innerText = "Arvuti võitis!"; }
+    else if (result === "Viik!") { el.className = "game-result result-draw"; el.innerText = "Viik!"; }
     else { el.className = "game-result result-none"; el.innerText = "Mäng käib"; }
   }
 
@@ -338,9 +338,9 @@
     clearPlaceHere();
     const hint = document.getElementById("big-hint");
     hint.className = "big-hint blue";
-    hint.innerText = "👉 SINU KÄIK: aseta HELESININE ruut tühjale kohale";
+    hint.innerText = "SINU KÄIK: aseta HELESININE ruut tühjale kohale";
     const btn = document.getElementById("send-btn");
-    btn.disabled = false; btn.innerText = "✅ Minu käik tehtud";
+    btn.disabled = false; btn.innerText = "Minu käik tehtud";
     setStatus("");
   }
 
@@ -350,18 +350,18 @@
     const { nx, no } = counts();
     if (nx - no !== 1) {
       let msg;
-      if (nx === no) msg = "⚠️ Ma ei näe uut sinist ruutu. Aseta see ja oota hetk.";
-      else if (nx > no + 1) msg = "⚠️ Sinist on liiga palju (" + nx + "). Kontrolli lauda.";
-      else msg = "⚠️ Punast on rohkem kui sinist. Kontrolli lauda.";
+      if (nx === no) msg = "Ma ei näe uut sinist ruutu. Aseta see ja oota hetk.";
+      else if (nx > no + 1) msg = "Sinist on liiga palju (" + nx + "). Kontrolli lauda.";
+      else msg = "Punast on rohkem kui sinist. Kontrolli lauda.";
       setStatus(msg, "#d32f2f");
       return;
     }
     phase = "waiting";
     document.getElementById("send-btn").disabled = true;
     sentBoard = stable.slice();
-    setStatus("⏳ Küsin arvutilt käiku...", "green");
+    setStatus("Küsin arvutilt käiku...", "green");
     document.getElementById("big-hint").className = "big-hint blue";
-    document.getElementById("big-hint").innerText = "⏳ Arvuti mõtleb...";
+    document.getElementById("big-hint").innerText = "Arvuti mõtleb...";
     askServer(sentBoard, 0, gameId);
   }
 
@@ -394,11 +394,11 @@
     jsonpCall(q, (data) => { if (myGame === gameId) handleMove(data); }, () => {
       if (myGame !== gameId) return;
       if (attempt < 2) {
-        setStatus("⏳ Server ärkab... proovin uuesti (" + (attempt + 2) + "/3)", "#f57f17");
+        setStatus("Server ärkab... proovin uuesti (" + (attempt + 2) + "/3)", "#f57f17");
         askServer(board, attempt + 1, myGame);
       } else {
         // запасной вариант: ход считается на телефоне
-        setStatus("⚠️ Server ei vastanud — arvuti käik arvutati telefonis.", "#f57f17");
+        setStatus("Server ei vastanud — arvuti käik arvutati telefonis.", "#f57f17");
         handleMove({ status: "success", nextMove: localMove(board) });
       }
     }, 12000);
@@ -409,7 +409,7 @@
     if (data && data.status === "error") {
       phase = "human";
       document.getElementById("send-btn").disabled = false;
-      setStatus("❌ Serveri viga: " + (data.error || ""), "#d32f2f");
+      setStatus("Serveri viga: " + (data.error || ""), "#d32f2f");
       return;
     }
     if (move === undefined || move === null || move === -1 || sentBoard[move] !== "-") {
@@ -429,11 +429,11 @@
     const row = Math.floor(index / 3) + 1, col = (index % 3) + 1;
     const hint = document.getElementById("big-hint");
     hint.className = "big-hint red";
-    hint.innerText = "🔴 ARVUTI KÄIK: aseta PUNANE ruut lahtrisse " + (index + 1) + " (rida " + row + ", veerg " + col + ")";
-    if (!document.getElementById("server-status").innerText.startsWith("⚠️"))
+    hint.innerText = "ARVUTI KÄIK: aseta PUNANE ruut lahtrisse " + (index + 1) + " (rida " + row + ", veerg " + col + ")";
+    if (!document.getElementById("server-status").innerText.startsWith("Server ei"))
       setStatus("Aseta punane ruut — kaamera märkab seda ise.", "#d32f2f");
     const btn = document.getElementById("send-btn");
-    btn.innerText = "⏳ Ootan punast ruutu..."; btn.disabled = true;
+    btn.innerText = "Ootan punast ruutu..."; btn.disabled = true;
   }
 
   // запасной ход на телефоне (minimax)
@@ -476,19 +476,19 @@
   function showWaitingScreen() {
     const hint = document.getElementById("big-hint");
     hint.className = "big-hint blue";
-    hint.innerText = "⏳ Ootan telefoni... (tuba: " + ROOM + ")";
+    hint.innerText = "Ootan telefoni... (tuba: " + ROOM + ")";
   }
 
   function pollScreen() {
     jsonpCall("action=get&room=" + ROOM, (data) => {
       const st = data && data.state;
-      if (!st) { setStatus("✔ Server töötab, ootan telefoni...", "green"); return; }
-      setStatus("✔ Server töötab", "green");
+      if (!st) { setStatus("Server töötab, ootan telefoni...", "green"); return; }
+      setStatus("Server töötab", "green");
       if (st.v === lastScreenV) return;
       lastScreenV = st.v;
       applyScreenState(st);
     }, () => {
-      setStatus("❌ Server ei vasta. Kontrolli Apps Scripti: Who has access = Anyone ja New version.", "#d32f2f");
+      setStatus("Server ei vasta. Kontrolli Apps Scripti: Who has access = Anyone ja New version.", "#d32f2f");
     }, 8000);
   }
 
@@ -500,20 +500,20 @@
     if (st.phase === "over" && st.result) {
       renderBoard(st.result);
       hint.className = "big-hint blue";
-      hint.innerText = "🏁 " + (st.result === "Viik!" ? "Viik!" : st.result.endsWith("X") ? "Sina võitsid!" : "Arvuti võitis!");
+      hint.innerText = st.result === "Viik!" ? "Viik!" : st.result.endsWith("X") ? "Sina võitsid!" : "Arvuti võitis!";
       return;
     }
     renderBoard();
     if (st.phase === "red" && st.suggested >= 0) {
       document.getElementById("cell-" + st.suggested).classList.add("place-here");
       hint.className = "big-hint red";
-      hint.innerText = "🔴 ARVUTI KÄIK: punane ruut lahtrisse " + (st.suggested + 1);
+      hint.innerText = "ARVUTI KÄIK: punane ruut lahtrisse " + (st.suggested + 1);
     } else if (st.phase === "waiting") {
       hint.className = "big-hint blue";
-      hint.innerText = "⏳ Arvuti mõtleb...";
+      hint.innerText = "Arvuti mõtleb...";
     } else {
       hint.className = "big-hint blue";
-      hint.innerText = "👉 Sinu käik: aseta sinine ruut";
+      hint.innerText = "Sinu käik: aseta sinine ruut";
     }
   }
 
