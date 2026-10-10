@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html lang="et"><head>
+<html lang="et">
+<head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Trips-Traps-Trull — Sinine vs Punane</title>
@@ -64,7 +65,7 @@
   body.screen .game-result { font-size: 1.8em; }
 </style>
 </head>
-<body class="all">
+<body>
 <div class="container">
   <h2 id="title">Trips-Traps-Trull — Sina vs Arvuti</h2>
 
@@ -75,7 +76,7 @@
 
   <div class="board-container">
     <div id="cam-col" style="text-align:center;">
-      <video id="v1" autoplay="" playsinline="" muted="" style="display:none;"></video>
+      <video id="v1" autoplay playsinline muted style="display:none;"></video>
       <canvas id="c1" width="480" height="360"></canvas>
       <div style="margin-top:6px; font-size:0.95em; color:#555; max-width:480px;">
         Aseta paber nii, et kõik 9 raami oleksid mängulaua lahtrite peal.
@@ -89,18 +90,18 @@
     <div style="text-align:center;">
       <div id="board-wrap">
         <h3>Mängulaud</h3>
-        <div class="board" id="board"><div class="cell" id="cell-0"><span class="num">1</span></div><div class="cell" id="cell-1"><span class="num">2</span></div><div class="cell" id="cell-2"><span class="num">3</span></div><div class="cell" id="cell-3"><span class="num">4</span></div><div class="cell" id="cell-4"><span class="num">5</span></div><div class="cell" id="cell-5"><span class="num">6</span></div><div class="cell" id="cell-6"><span class="num">7</span></div><div class="cell" id="cell-7"><span class="num">8</span></div><div class="cell" id="cell-8"><span class="num">9</span></div></div>
+        <div class="board" id="board"></div>
         <div id="game-result" class="game-result result-none">Mäng käib</div>
       </div>
 
-      <div id="big-hint" class="big-hint blue">👉 SINU KÄIK: aseta HELESININE ruut tühjale kohale</div>
+      <div id="big-hint" class="big-hint blue"></div>
 
       <div id="controls">
         <div>
           <label>Raskus:
             <select id="level">
               <option value="easy">Lihtne</option>
-              <option value="hard" selected="">Raske</option>
+              <option value="hard" selected>Raske</option>
             </select>
           </label>
         </div>
@@ -108,7 +109,7 @@
         <button class="reset" onclick="resetGame()">🔄 Uus mäng</button>
       </div>
 
-      <div id="server-status" class="status" style="color: rgb(51, 51, 51);"></div>
+      <div id="server-status" class="status"></div>
       <div id="seen" class="seen"></div>
 
       <div class="step-box" id="steps">
@@ -152,6 +153,7 @@
   function start() {
     document.body.classList.add(MODE);
     const boardEl = document.getElementById("board");
+    boardEl.innerHTML = "";
     for (let i = 0; i < 9; i++) {
       const d = document.createElement("div");
       d.className = "cell"; d.id = "cell-" + i;
@@ -480,10 +482,14 @@
   function pollScreen() {
     jsonpCall("action=get&room=" + ROOM, (data) => {
       const st = data && data.state;
-      if (!st || st.v === lastScreenV) return;
+      if (!st) { setStatus("✔ Server töötab, ootan telefoni...", "green"); return; }
+      setStatus("✔ Server töötab", "green");
+      if (st.v === lastScreenV) return;
       lastScreenV = st.v;
       applyScreenState(st);
-    }, () => {}, 8000);
+    }, () => {
+      setStatus("❌ Server ei vasta. Kontrolli Apps Scripti: Who has access = Anyone ja New version.", "#d32f2f");
+    }, 8000);
   }
 
   function applyScreenState(st) {
@@ -524,7 +530,5 @@
 
   window.onload = start;
 </script>
-
-
 </body>
 </html>
