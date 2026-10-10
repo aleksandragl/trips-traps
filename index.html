@@ -1,439 +1,453 @@
 <!DOCTYPE html>
-<html>
+<html lang="et">
 <head>
-    <meta charset="UTF-8">
-    <title>Trips-Traps-Trull — Sinine vs Punane</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f9; color: #333; }
-        .container { display: flex; flex-direction: column; align-items: center; gap: 20px; }
-        .board-container { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
-        video, canvas { border: 2px solid #333; border-radius: 8px; max-width: 100%; background: #000; }
-        .board { display: grid; grid-template-columns: repeat(3, 100px); gap: 6px; margin-top: 10px; }
-        .cell {
-            width: 100px; height: 100px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 52px; font-weight: bold;
-            border: 3px solid #999; background: #fff; border-radius: 8px;
-            transition: all 0.3s;
-        }
-        .cell.x { background: #e3f2fd; color: #1976d2; border-color: #1976d2; }
-        .cell.o { background: #ffebee; color: #d32f2f; border-color: #d32f2f; }
-
-        .cell.place-here {
-            animation: blink 1s infinite alternate;
-            border-color: #d32f2f;
-            border-style: dashed;
-        }
-        @keyframes blink {
-            from { box-shadow: 0 0 5px #d32f2f; background: #fff; }
-            to   { box-shadow: 0 0 25px #d32f2f; background: #ffebee; }
-        }
-
-        .cell.new-move { animation: pop 0.6s ease; }
-        @keyframes pop {
-            0%   { transform: scale(0.3); opacity: 0; }
-            60%  { transform: scale(1.15); opacity: 1; }
-            100% { transform: scale(1); }
-        }
-
-        .game-result { font-size: 1.4em; font-weight: bold; margin: 15px 0; padding: 12px 20px; border-radius: 8px; }
-        .result-none { background: #e0e0e0; color: #555; }
-        .result-win  { background: #c8e6c9; color: #2e7d32; }
-        .result-lose { background: #ffcdd2; color: #c62828; }
-        .result-draw { background: #fff9c4; color: #f57f17; }
-
-        .status { margin-top: 10px; font-weight: bold; font-size: 1.15em; min-height: 1.5em; }
-        button {
-            padding: 14px 24px; font-size: 17px; background-color: #1976d2;
-            color: white; border: none; border-radius: 6px; cursor: pointer;
-            margin: 4px;
-        }
-        button:hover { background-color: #1565c0; }
-        button:disabled { background-color: #bbb; cursor: not-allowed; }
-        button.reset { background: #607d8b; }
-        button.reset:hover { background: #455a64; }
-
-        .legend { display: flex; gap: 24px; justify-content: center; margin: 10px 0; font-size: 1.1em; flex-wrap: wrap; }
-        .legend span { display: flex; align-items: center; gap: 8px; }
-        .dot { width: 24px; height: 24px; display: inline-block; border: 2px solid #333; }
-        .dot.x { background: #1976d2; }
-        .dot.o { background: #d32f2f; }
-
-        .step-box {
-            background: #fff;
-            border: 2px solid #1976d2;
-            border-radius: 8px;
-            padding: 12px 16px;
-            margin-top: 12px;
-            max-width: 360px;
-            font-size: 0.98em;
-            text-align: left;
-        }
-        .step-box b { color: #1976d2; }
-        .step-box .red { color: #d32f2f; }
-
-        .big-hint {
-            font-size: 1.25em;
-            font-weight: bold;
-            padding: 14px 20px;
-            border-radius: 8px;
-            margin: 12px 0;
-            max-width: 360px;
-        }
-        .big-hint.red {
-            background: #ffebee;
-            color: #d32f2f;
-            border: 3px solid #d32f2f;
-        }
-        .big-hint.blue {
-            background: #e3f2fd;
-            color: #1976d2;
-            border: 3px solid #1976d2;
-        }
-    </style>
-    <script>
-      let player = null, c = null, g = null;
-      let boardState = Array(9).fill("-");
-      let currentGameResult = "Mäng käib";
-      let waitingForServer = false;
-      let gameOver = false;
-      let waitingForHumanMove = true;
-      let suggestedRedIndex = -1;
-
-      const gridCoords = [
-        { x: 30,  y: 20  }, { x: 140, y: 20  }, { x: 250, y: 20  },
-        { x: 30,  y: 90  }, { x: 140, y: 90  }, { x: 250, y: 90  },
-        { x: 30,  y: 160 }, { x: 140, y: 160 }, { x: 250, y: 160 }
-      ];
-
-      const winningCombos = [
-        [0, 1, 2], [3, 4, 5], [6, 7, 8],
-        [0, 3, 6], [1, 4, 7], [2, 5, 8],
-        [0, 4, 8], [2, 4, 6]
-      ];
-
-      const SERVER_URL = "https://script.google.com/macros/s/AKfycbwCkaQeRqbG3i4uefRugBjCIqoBwPr7Ebn0292t__OPej2b0F9i0S44qFKX_Q1tf7n8/exec";
-
-      function start() {
-        player = document.getElementById("v1");
-        c = document.getElementById("c1");
-        g = c.getContext("2d");
-
-        navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: "environment" } }
-        }).then((stream) => {
-          player.srcObject = stream;
-        }).catch((err) => {
-          alert("Kaamera viga: " + err);
-        });
-
-        setInterval(capture, 400);
-        updateBoardUI(boardState, currentGameResult);
-        showHumanTurn();
-      }
-
-      function rgbToHsv(r, g, b) {
-        r /= 255; g /= 255; b /= 255;
-        let max = Math.max(r, g, b), min = Math.min(r, g, b);
-        let h, s, v = max;
-        let d = max - min;
-        s = max === 0 ? 0 : d / max;
-        if (max === min) { h = 0; }
-        else {
-          switch (max) {
-            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-            case g: h = (b - r) / d + 2; break;
-            case b: h = (r - g) / d + 4; break;
-          }
-          h /= 6;
-        }
-        return { h: Math.round(h * 360), s: Math.round(s * 100), v: Math.round(v * 100) };
-      }
-
-      function checkWinner(board) {
-        for (let combo of winningCombos) {
-          const [a, b, c] = combo;
-          if (board[a] !== "-" && board[a] === board[b] && board[a] === board[c]) {
-            return "Võitja: " + board[a];
-          }
-        }
-        if (!board.includes("-")) return "Viik!";
-        return "Mäng käib";
-      }
-
-      // ===== Камера видит квадратики =====
-      function capture() {
-        if (!player || !player.videoWidth) return;
-        if (gameOver) return;
-
-        g.drawImage(player, 0, 0, c.width, c.height);
-
-        let newBoardState = [];
-
-        gridCoords.forEach((coord) => {
-          g.strokeStyle = "#ff0000";
-          g.lineWidth = 2;
-          g.strokeRect(coord.x, coord.y, 40, 40);
-
-          let d = g.getImageData(coord.x, coord.y, 40, 40);
-          let r = 0, gr = 0, b = 0, count = 0;
-          for (let i = 0; i < d.data.length; i += 4) {
-            r  += d.data[i];
-            gr += d.data[i+1];
-            b  += d.data[i+2];
-            count++;
-          }
-          r  = Math.round(r / count);
-          gr = Math.round(gr / count);
-          b  = Math.round(b / count);
-
-          let symbol = "-";
-
-          // ===== Распознавание цветов через RGB =====
-          // СВЕТЛО-СИНИЙ (как небо) → X (человек)
-          if (b > r + 15 && b > 120 && b >= gr) {
-            symbol = "X";
-          }
-          // КРАСНЫЙ → O (компьютер)
-          else if (r > b + 30 && r > gr + 30 && r > 100) {
-            symbol = "O";
-          }
-
-          newBoardState.push(symbol);
-        });
-
-        boardState = newBoardState;
-        currentGameResult = checkWinner(boardState);
-        updateBoardUI(boardState, currentGameResult);
-
-        if (currentGameResult !== "Mäng käib") {
-          gameOver = true;
-        }
-      }
-
-      function updateBoardUI(state, result) {
-        state.forEach((symbol, index) => {
-          let cell = document.getElementById("cell-" + index);
-          const wasNew = cell.classList.contains("new-move");
-          const wasPlace = cell.classList.contains("place-here");
-
-          cell.innerText = symbol === "-" ? "" : symbol;
-          cell.className = "cell " + (symbol === "X" ? "x" : symbol === "O" ? "o" : "");
-          if (wasNew) cell.classList.add("new-move");
-          if (wasPlace) cell.classList.add("place-here");
-        });
-
-        const resEl = document.getElementById("game-result");
-        resEl.innerText = result;
-        if (result.startsWith("Võitja: X")) {
-          resEl.className = "game-result result-win";
-          resEl.innerText = "🎉 Sina võitsid! (Sinine)";
-        } else if (result.startsWith("Võitja: O")) {
-          resEl.className = "game-result result-lose";
-          resEl.innerText = "😢 Arvuti võitis! (Punane)";
-        } else if (result === "Viik!") {
-          resEl.className = "game-result result-draw";
-          resEl.innerText = "🤝 Viik!";
-        } else {
-          resEl.className = "game-result result-none";
-        }
-      }
-
-      function showHumanTurn() {
-        waitingForHumanMove = true;
-        suggestedRedIndex = -1;
-        document.querySelectorAll(".cell").forEach(c => c.classList.remove("place-here"));
-
-        const hint = document.getElementById("big-hint");
-        hint.className = "big-hint blue";
-        hint.innerText = "👉 SINU KÄIK: aseta SININE ruut tühjale kohale";
-
-        document.getElementById("send-btn").disabled = false;
-        document.getElementById("server-status").innerText = "";
-      }
-
-      // ===== Отправка на сервер — теперь ТОЛЬКО GET, без POST =====
-      function sendDataToServer() {
-        if (waitingForServer || gameOver) return;
-
-        if (!boardState.includes("X")) {
-          const statusEl = document.getElementById("server-status");
-          statusEl.innerText = "⚠️ Aseta kõigepealt sinine ruut paberile!";
-          statusEl.style.color = "#d32f2f";
-          return;
-        }
-
-        waitingForServer = true;
-        document.getElementById("send-btn").disabled = true;
-
-        const statusEl = document.getElementById("server-status");
-        statusEl.innerText = "⏳ Küsin arvutilt käiku...";
-        statusEl.style.color = "green";
-
-        // Сразу GET — один запрос вместо двух
-        askServerForMove(boardState);
-      }
-
-      function askServerForMove(board) {
-        window.handleServerMove = function(data) {
-          waitingForServer = false;
-          document.getElementById("send-btn").disabled = false;
-
-          const move = data.nextMove;
-          if (move === -1 || move === undefined || move === null) {
-            document.getElementById("server-status").innerText =
-              "Arvuti: käik puudub.";
-            return;
-          }
-
-          showComputerSuggestion(move);
-        };
-
-        const script = document.createElement("script");
-        script.src = SERVER_URL + "?board=" + board.join(",") + "&callback=handleServerMove&t=" + Date.now();
-        document.body.appendChild(script);
-        script.onload = () => script.remove();
-      }
-
-      // ===== Комп говорит, куда положить красный =====
-      function showComputerSuggestion(index) {
-        suggestedRedIndex = index;
-        waitingForHumanMove = false;
-
-        document.querySelectorAll(".cell").forEach(c => {
-          c.classList.remove("place-here");
-          c.classList.remove("new-move");
-        });
-
-        const cell = document.getElementById("cell-" + index);
-        if (cell) {
-          cell.classList.add("place-here");
-          cell.classList.add("new-move");
-        }
-
-        const hint = document.getElementById("big-hint");
-        hint.className = "big-hint red";
-        hint.innerText = "🔴 ARVUTI KÄIK: aseta PUNANE ruut ruutu " +
-                         (index + 1) + " (vasakult ülevalt lugedes)";
-
-        const statusEl = document.getElementById("server-status");
-        statusEl.style.color = "#d32f2f";
-        statusEl.innerText = "Aseta punane ruut mängulauale ja vajuta nuppu uuesti.";
-
-        const btn = document.getElementById("send-btn");
-        btn.innerText = "✅ Punane asetatud — nüüd minu kord";
-        btn.disabled = false;
-        btn.onclick = confirmRedPlaced;
-      }
-
-      // ===== Игрок подтвердил, что положил красный =====
-      function confirmRedPlaced() {
-        if (suggestedRedIndex === -1) return;
-
-        if (boardState[suggestedRedIndex] !== "O") {
-          document.getElementById("server-status").innerText =
-            "⏳ Ootan, et kaamera näeks punast ruutu...";
-          setTimeout(confirmRedPlaced, 600);
-          return;
-        }
-
-        document.querySelectorAll(".cell").forEach(c => c.classList.remove("place-here"));
-        suggestedRedIndex = -1;
-
-        const btn = document.getElementById("send-btn");
-        btn.innerText = "✅ Minu käik tehtud — saada serverisse";
-        btn.onclick = sendDataToServer;
-
-        currentGameResult = checkWinner(boardState);
-        if (currentGameResult !== "Mäng käib") {
-          gameOver = true;
-          document.getElementById("big-hint").className = "big-hint blue";
-          document.getElementById("big-hint").innerText = "🏁 " + currentGameResult;
-          return;
-        }
-
-        showHumanTurn();
-      }
-
-      // ===== Сброс =====
-      function resetGame() {
-        boardState = Array(9).fill("-");
-        currentGameResult = "Mäng käib";
-        waitingForServer = false;
-        waitingForHumanMove = true;
-        gameOver = false;
-        suggestedRedIndex = -1;
-
-        document.querySelectorAll(".cell").forEach(c => {
-          c.classList.remove("new-move", "place-here");
-        });
-
-        const btn = document.getElementById("send-btn");
-        btn.innerText = "✅ Minu käik tehtud — saada serverisse";
-        btn.onclick = sendDataToServer;
-        btn.disabled = false;
-
-        document.getElementById("server-status").innerText = "";
-        updateBoardUI(boardState, currentGameResult);
-        showHumanTurn();
-      }
-    </script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trips-Traps-Trull — Sinine vs Punane</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f9; color: #333; }
+  .container { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+  .board-container { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+  canvas { border: 2px solid #333; border-radius: 8px; max-width: 100%; background: #000; }
+  .board { display: grid; grid-template-columns: repeat(3, 100px); gap: 6px; margin-top: 10px; justify-content: center; }
+  .cell {
+    width: 100px; height: 100px; display: flex; align-items: center; justify-content: center;
+    font-size: 52px; font-weight: bold; border: 3px solid #999; background: #fff; border-radius: 8px;
+    transition: all 0.3s; position: relative;
+  }
+  .cell .num { position: absolute; top: 3px; left: 7px; font-size: 13px; color: #aaa; font-weight: normal; }
+  .cell.x { background: #e3f2fd; color: #1976d2; border-color: #1976d2; }
+  .cell.o { background: #ffebee; color: #d32f2f; border-color: #d32f2f; }
+  .cell.place-here { animation: blink 1s infinite alternate; border-color: #d32f2f; border-style: dashed; }
+  @keyframes blink {
+    from { box-shadow: 0 0 5px #d32f2f; background: #fff; }
+    to   { box-shadow: 0 0 25px #d32f2f; background: #ffebee; }
+  }
+  .game-result { font-size: 1.4em; font-weight: bold; margin: 15px 0; padding: 12px 20px; border-radius: 8px; }
+  .result-none { background: #e0e0e0; color: #555; }
+  .result-win  { background: #c8e6c9; color: #2e7d32; }
+  .result-lose { background: #ffcdd2; color: #c62828; }
+  .result-draw { background: #fff9c4; color: #f57f17; }
+  .status { margin-top: 10px; font-weight: bold; font-size: 1.05em; min-height: 1.5em; max-width: 360px; }
+  .seen { font-size: 0.9em; color: #666; margin-top: 6px; }
+  button {
+    padding: 14px 20px; font-size: 16px; background-color: #1976d2; color: white;
+    border: none; border-radius: 6px; cursor: pointer; margin: 4px;
+  }
+  button:hover { background-color: #1565c0; }
+  button:disabled { background-color: #bbb; cursor: not-allowed; }
+  button.reset { background: #607d8b; }
+  button.calib { background: #00897b; }
+  select { padding: 10px; font-size: 15px; border-radius: 6px; margin: 4px; }
+  .legend { display: flex; gap: 24px; justify-content: center; margin: 10px 0; font-size: 1.1em; flex-wrap: wrap; }
+  .legend span { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 24px; height: 24px; display: inline-block; border: 2px solid #333; }
+  .dot.x { background: #9ad0f5; }
+  .dot.o { background: #d32f2f; }
+  .step-box {
+    background: #fff; border: 2px solid #1976d2; border-radius: 8px; padding: 12px 16px;
+    margin: 12px auto 0; max-width: 360px; font-size: 0.98em; text-align: left;
+  }
+  .big-hint { font-size: 1.2em; font-weight: bold; padding: 14px 20px; border-radius: 8px; margin: 12px auto; max-width: 360px; }
+  .big-hint.red  { background: #ffebee; color: #d32f2f; border: 3px solid #d32f2f; }
+  .big-hint.blue { background: #e3f2fd; color: #1976d2; border: 3px solid #1976d2; }
+</style>
 </head>
-<body onload="start()">
-    <div class="container">
-        <h2>Trips-Traps-Trull — Sina vs Arvuti</h2>
+<body>
+<div class="container">
+  <h2>Trips-Traps-Trull — Sina vs Arvuti</h2>
 
-        <div class="legend">
-            <span><span class="dot x"></span> <b>Sinine ruut</b> = Sina (X)</span>
-            <span><span class="dot o"></span> <b>Punane ruut</b> = Arvuti (O)</span>
-        </div>
+  <div class="legend">
+    <span><span class="dot x"></span> <b>Helesinine ruut</b> = Sina (X)</span>
+    <span><span class="dot o"></span> <b>Punane ruut</b> = Arvuti (O)</span>
+  </div>
 
-        <div class="board-container">
-            <div>
-                <video id="v1" autoplay playsinline style="display:none;"></video>
-                <canvas id="c1" width="320" height="240"></canvas>
-                <div style="text-align:center; margin-top:6px; font-size:0.95em; color:#555; max-width:320px;">
-                    Aseta paber nii, et kõik 9 punast ruutu kataksid mänguvälja
-                </div>
-            </div>
-
-            <div style="text-align: center;">
-                <h3>Mängulaud</h3>
-                <div class="board">
-                    <div class="cell" id="cell-0"></div>
-                    <div class="cell" id="cell-1"></div>
-                    <div class="cell" id="cell-2"></div>
-                    <div class="cell" id="cell-3"></div>
-                    <div class="cell" id="cell-4"></div>
-                    <div class="cell" id="cell-5"></div>
-                    <div class="cell" id="cell-6"></div>
-                    <div class="cell" id="cell-7"></div>
-                    <div class="cell" id="cell-8"></div>
-                </div>
-
-                <div id="game-result" class="game-result result-none">Mäng käib</div>
-
-                <div id="big-hint" class="big-hint blue">
-                    👉 SINU KÄIK: aseta SININE ruut tühjale kohale
-                </div>
-
-                <button id="send-btn" onclick="sendDataToServer()">
-                    ✅ Minu käik tehtud — saada serverisse
-                </button>
-                <button class="reset" onclick="resetGame()">🔄 Uus mäng</button>
-
-                <div id="server-status" class="status"></div>
-
-                <div class="step-box">
-                    <b>Kuidas mängida:</b><br>
-                    1. Aseta <b style="color:#1976d2;">SININE ruut</b> tühjale kohale<br>
-                    2. Vajuta rohelist nuppu<br>
-                    3. Arvuti ütleb, kuhu panna <b class="red">PUNANE ruut</b><br>
-                    4. Aseta punane sinna ja vajuta uuesti<br>
-                    5. Korda, kuni 3 järjest — võit!
-                </div>
-            </div>
-        </div>
+  <div class="board-container">
+    <div style="text-align:center;">
+      <video id="v1" autoplay playsinline muted style="display:none;"></video>
+      <canvas id="c1" width="480" height="360"></canvas>
+      <div style="margin-top:6px; font-size:0.95em; color:#555; max-width:480px;">
+        Aseta paber nii, et kõik 9 ruutu (kollased raamid) oleksid mängulaua lahtrite peal.
+      </div>
+      <div style="margin-top:8px;">
+        <button class="calib" id="calib-btn" onclick="calibrate()">🎯 Kalibreeri (tühi laud)</button>
+      </div>
+      <div id="calib-status" class="seen"></div>
     </div>
+
+    <div style="text-align:center;">
+      <h3>Mängulaud</h3>
+      <div class="board" id="board"></div>
+
+      <div id="game-result" class="game-result result-none">Mäng käib</div>
+      <div id="big-hint" class="big-hint blue"></div>
+
+      <div>
+        <label>Raskus:
+          <select id="level">
+            <option value="easy">Lihtne</option>
+            <option value="hard" selected>Raske</option>
+          </select>
+        </label>
+      </div>
+
+      <button id="send-btn" onclick="sendDataToServer()">✅ Minu käik tehtud</button>
+      <button class="reset" onclick="resetGame()">🔄 Uus mäng</button>
+
+      <div id="server-status" class="status"></div>
+      <div id="seen" class="seen"></div>
+
+      <div class="step-box">
+        <b>Kuidas mängida:</b><br>
+        0. Tühja laua peal vajuta <b>Kalibreeri</b> (üks kord, kui valgus muutub)<br>
+        1. Aseta <b style="color:#1976d2;">HELESININE ruut</b> tühjale kohale<br>
+        2. Vajuta <b>Minu käik tehtud</b><br>
+        3. Arvuti ütleb, kuhu panna <b style="color:#d32f2f;">PUNANE ruut</b><br>
+        4. Aseta punane sinna — kaamera märkab seda ise<br>
+        5. Korda, kuni 3 järjest — võit!
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SERVER_URL = "https://script.google.com/macros/s/AKfycbwCkaQeRqbG3i4uefRugBjCIqoBwPr7Ebn0292t__OPej2b0F9i0S44qFKX_Q1tf7n8/exec";
+
+  const W = 480, H = 360;
+  const BOX = 44;        // рамка на экране
+  const SAMPLE = 24;     // читаем только середину, не рамку
+  const HIST = 6;        // сколько кадров помним
+  const NEED = 4;        // сколько одинаковых нужно для «стабильного» значения
+  const centers = [];
+  [60, 165, 270].forEach(y => [75, 240, 405].forEach(x => centers.push({ x, y })));
+
+  const winningCombos = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+  let player, canvas, ctx;
+  let stable = Array(9).fill("-");
+  let hist = Array.from({ length: 9 }, () => []);
+  let lastFeatures = null;
+  let baseline = null;            // калибровка пустого поля
+  let phase = "human";            // human | waiting | red | over
+  let suggested = -1;
+  let sentBoard = null;
+  let gameId = 0, reqId = 0;
+  let lastBoardKey = "";
+
+  // ---------- старт ----------
+  function start() {
+    player = document.getElementById("v1");
+    canvas = document.getElementById("c1");
+    ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+    const boardEl = document.getElementById("board");
+    for (let i = 0; i < 9; i++) {
+      const d = document.createElement("div");
+      d.className = "cell"; d.id = "cell-" + i;
+      boardEl.appendChild(d);
+    }
+
+    try {
+      const saved = localStorage.getItem("ttt_baseline");
+      if (saved) { baseline = JSON.parse(saved); setCalibText(true); }
+    } catch (e) {}
+
+    startCamera();
+    setInterval(capture, 250);
+    renderBoard();
+    showHumanTurn();
+  }
+
+  function startCamera() {
+    const tryGet = (constraints) => navigator.mediaDevices.getUserMedia(constraints);
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert("Kaamera pole saadaval. Ava leht HTTPS-iga (või localhost).");
+      return;
+    }
+    tryGet({ video: { facingMode: { ideal: "environment" }, width: { ideal: 640 }, height: { ideal: 480 } } })
+      .catch(() => tryGet({ video: true }))
+      .then(stream => { player.srcObject = stream; })
+      .catch(err => alert("Kaamera viga: " + err));
+  }
+
+  // ---------- распознавание цвета ----------
+  function features(r, g, b) {
+    const s = r + g + b + 1;
+    return { r, g, b, fb: (b - r) / s, fr: r / s, sum: s };
+  }
+
+  function classify(i, f) {
+    if (f.sum < 120) return "-";                    // слишком темно (тень, рука)
+
+    if (baseline && baseline[i]) {
+      const dB = f.fb - baseline[i].fb;             // насколько стало «синее» чем пустая бумага
+      const dR = f.fr - baseline[i].fr;             // насколько стало «краснее»
+      if (dR > 0.07 && f.r > f.g + 20 && f.r > f.b + 20) return "O";
+      if (dB > 0.035 && f.b >= f.g - 8) return "X";
+      return "-";
+    }
+    // без калибровки
+    if (f.fr > 0.45 && f.r - Math.max(f.g, f.b) > 35) return "O";
+    if (f.fb > 0.045 && f.b > f.r && f.b >= f.g - 8) return "X";
+    return "-";
+  }
+
+  function capture() {
+    if (!player || !player.videoWidth) return;
+    ctx.drawImage(player, 0, 0, W, H);
+
+    // 1) СНАЧАЛА читаем пиксели (без рамок поверх!)
+    const feats = [];
+    const raw = [];
+    centers.forEach((p, i) => {
+      const d = ctx.getImageData(p.x - SAMPLE / 2, p.y - SAMPLE / 2, SAMPLE, SAMPLE).data;
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let k = 0; k < d.length; k += 4) { r += d[k]; g += d[k + 1]; b += d[k + 2]; n++; }
+      const f = features(r / n, g / n, b / n);
+      feats.push(f);
+      raw.push(classify(i, f));
+    });
+    lastFeatures = feats;
+
+    // 2) сглаживание по кадрам
+    if (phase !== "over") {
+      raw.forEach((s, i) => {
+        hist[i].push(s);
+        if (hist[i].length > HIST) hist[i].shift();
+        const cnt = {};
+        hist[i].forEach(v => cnt[v] = (cnt[v] || 0) + 1);
+        let best = stable[i];
+        for (const k in cnt) if (cnt[k] >= NEED) best = k;
+        stable[i] = best;
+      });
+    }
+
+    // 3) ПОТОМ рисуем рамки
+    centers.forEach((p, i) => {
+      const s = stable[i];
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = s === "X" ? "#40a9ff" : s === "O" ? "#ff3b30" : "#ffd600";
+      ctx.strokeRect(p.x - BOX / 2, p.y - BOX / 2, BOX, BOX);
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 14px Arial";
+      ctx.fillText(s === "-" ? String(i + 1) : s, p.x - BOX / 2 + 3, p.y - BOX / 2 + 15);
+    });
+
+    tick();
+  }
+
+  // ---------- калибровка ----------
+  function calibrate() {
+    if (!lastFeatures) { alert("Kaamera pole veel valmis."); return; }
+    if (!confirm("Kas laud on TÜHI (ühtegi ruutu pole peal)?")) return;
+    baseline = lastFeatures.map(f => ({ fb: f.fb, fr: f.fr }));
+    try { localStorage.setItem("ttt_baseline", JSON.stringify(baseline)); } catch (e) {}
+    stable = Array(9).fill("-");
+    hist = Array.from({ length: 9 }, () => []);
+    setCalibText(true);
+  }
+  function setCalibText(ok) {
+    document.getElementById("calib-status").innerText = ok ? "✔ Kalibreeritud" : "Kalibreerimata";
+  }
+
+  // ---------- логика игры ----------
+  function counts() {
+    return { nx: stable.filter(v => v === "X").length, no: stable.filter(v => v === "O").length };
+  }
+
+  function checkWinner(board) {
+    for (const [a, b, c] of winningCombos)
+      if (board[a] !== "-" && board[a] === board[b] && board[a] === board[c]) return "Võitja: " + board[a];
+    if (!board.includes("-")) return "Viik!";
+    return "Mäng käib";
+  }
+
+  function tick() {
+    const { nx, no } = counts();
+    document.getElementById("seen").innerText = "Kaamera näeb: sinine " + nx + ", punane " + no;
+
+    const key = stable.join("") + phase;
+    if (key !== lastBoardKey) { lastBoardKey = key; renderBoard(); }
+
+    if (phase === "over") return;
+
+    const valid = (nx - no === 0 || nx - no === 1);
+    if (valid) {
+      const res = checkWinner(stable);
+      if (res !== "Mäng käib") { finish(res); return; }
+    }
+
+    if (phase === "red") {
+      if (stable[suggested] === "O" && nx === no) {
+        // красный лёг на нужное место
+        suggested = -1;
+        showHumanTurn();
+      } else if (stable[suggested] !== "O" && no >= nx && no > 0 && stable.some((v, i) => v === "O" && i !== suggested && sentBoard[i] !== "O")) {
+        setStatus("⚠️ Punane ruut on vales kohas! Vaja ruutu " + (suggested + 1) + ".", "#d32f2f");
+      }
+    }
+  }
+
+  function finish(res) {
+    phase = "over";
+    renderBoard(res);
+    const hint = document.getElementById("big-hint");
+    hint.className = "big-hint blue";
+    hint.innerText = "🏁 " + (res === "Viik!" ? "Viik!" : res.endsWith("X") ? "Sina võitsid!" : "Arvuti võitis!");
+    document.getElementById("send-btn").disabled = true;
+    clearPlaceHere();
+  }
+
+  function renderBoard(forcedResult) {
+    stable.forEach((s, i) => {
+      const cell = document.getElementById("cell-" + i);
+      const keepPlace = cell.classList.contains("place-here");
+      cell.className = "cell " + (s === "X" ? "x" : s === "O" ? "o" : "") + (keepPlace ? " place-here" : "");
+      cell.innerHTML = '<span class="num">' + (i + 1) + "</span>" + (s === "-" ? "" : s);
+    });
+    const { nx, no } = counts();
+    const valid = (nx - no === 0 || nx - no === 1);
+    const result = forcedResult || (valid ? checkWinner(stable) : "Mäng käib");
+    const el = document.getElementById("game-result");
+    if (result === "Võitja: X") { el.className = "game-result result-win";  el.innerText = "🎉 Sina võitsid!"; }
+    else if (result === "Võitja: O") { el.className = "game-result result-lose"; el.innerText = "😢 Arvuti võitis!"; }
+    else if (result === "Viik!") { el.className = "game-result result-draw"; el.innerText = "🤝 Viik!"; }
+    else { el.className = "game-result result-none"; el.innerText = "Mäng käib"; }
+  }
+
+  function clearPlaceHere() {
+    document.querySelectorAll(".cell").forEach(c => c.classList.remove("place-here"));
+  }
+
+  function setStatus(txt, color) {
+    const el = document.getElementById("server-status");
+    el.innerText = txt; el.style.color = color || "#333";
+  }
+
+  function showHumanTurn() {
+    phase = "human";
+    clearPlaceHere();
+    const hint = document.getElementById("big-hint");
+    hint.className = "big-hint blue";
+    hint.innerText = "👉 SINU KÄIK: aseta HELESININE ruut tühjale kohale";
+    const btn = document.getElementById("send-btn");
+    btn.disabled = false;
+    btn.innerText = "✅ Minu käik tehtud";
+    setStatus("");
+  }
+
+  // ---------- сервер ----------
+  function sendDataToServer() {
+    if (phase !== "human") return;
+    const { nx, no } = counts();
+
+    if (nx - no !== 1) {
+      let msg;
+      if (nx === no) msg = "⚠️ Ma ei näe uut sinist ruutu. Aseta see ja oota hetk.";
+      else if (nx > no + 1) msg = "⚠️ Sinist on liiga palju (" + nx + "). Kontrolli lauda.";
+      else msg = "⚠️ Punast on rohkem kui sinist. Kontrolli lauda.";
+      setStatus(msg, "#d32f2f");
+      return;
+    }
+
+    phase = "waiting";
+    document.getElementById("send-btn").disabled = true;
+    sentBoard = stable.slice();
+    setStatus("⏳ Küsin arvutilt käiku...", "green");
+    askServer(sentBoard, 0, gameId);
+  }
+
+  function askServer(board, attempt, myGame) {
+    const id = "cb" + (++reqId);
+    const script = document.createElement("script");
+    let done = false;
+
+    const fail = () => {
+      if (done) return;
+      done = true;
+      window[id] = function () {};   // поздний ответ ничего не сломает
+      script.remove();
+      clearTimeout(timer);
+      if (myGame !== gameId) return;
+      if (attempt < 2) {
+        setStatus("⏳ Server ärkab... proovin uuesti (" + (attempt + 2) + "/3)", "#f57f17");
+        askServer(board, attempt + 1, myGame);
+      } else {
+        phase = "human";
+        document.getElementById("send-btn").disabled = false;
+        setStatus("❌ Server ei vasta. Vajuta nuppu uuesti.", "#d32f2f");
+      }
+    };
+
+    const timer = setTimeout(fail, 12000);
+
+    window[id] = function (data) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      script.remove();
+      delete window[id];
+      if (myGame !== gameId) return;
+      handleMove(data);
+    };
+
+    script.onerror = fail;
+    script.src = SERVER_URL + "?board=" + encodeURIComponent(board.join(",")) +
+                 "&level=" + document.getElementById("level").value +
+                 "&callback=" + id + "&t=" + Date.now();
+    document.body.appendChild(script);
+  }
+
+  function handleMove(data) {
+    const move = data && data.nextMove;
+    if (data && data.status === "error") {
+      phase = "human";
+      document.getElementById("send-btn").disabled = false;
+      setStatus("❌ Serveri viga: " + (data.error || ""), "#d32f2f");
+      return;
+    }
+    if (move === undefined || move === null || move === -1 || sentBoard[move] !== "-") {
+      phase = "human";
+      document.getElementById("send-btn").disabled = false;
+      setStatus("Arvuti: käik puudub.", "#d32f2f");
+      return;
+    }
+    showComputerSuggestion(move);
+  }
+
+  function showComputerSuggestion(index) {
+    suggested = index;
+    phase = "red";
+    clearPlaceHere();
+    const cell = document.getElementById("cell-" + index);
+    if (cell) cell.classList.add("place-here");
+
+    const row = Math.floor(index / 3) + 1, col = (index % 3) + 1;
+    const hint = document.getElementById("big-hint");
+    hint.className = "big-hint red";
+    hint.innerText = "🔴 ARVUTI KÄIK: aseta PUNANE ruut lahtrisse " + (index + 1) +
+                     " (rida " + row + ", veerg " + col + ")";
+    setStatus("Aseta punane ruut — kaamera märkab seda ise.", "#d32f2f");
+
+    const btn = document.getElementById("send-btn");
+    btn.innerText = "⏳ Ootan punast ruutu...";
+    btn.disabled = true;
+  }
+
+  // ---------- сброс ----------
+  function resetGame() {
+    gameId++;
+    phase = "human";
+    suggested = -1;
+    sentBoard = null;
+    stable = Array(9).fill("-");
+    hist = Array.from({ length: 9 }, () => []);
+    lastBoardKey = "";
+    renderBoard();
+    showHumanTurn();
+  }
+
+  window.onload = start;
+</script>
 </body>
 </html>
